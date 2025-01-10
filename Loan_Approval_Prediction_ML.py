@@ -4,6 +4,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn import preprocessing 
 from matplotlib.ticker import MaxNLocator
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+
+from sklearn import metrics
 
 
 
@@ -12,10 +19,8 @@ def main():
 
     data.drop(['Loan_ID'],axis=1,inplace=True)
 
-
     obj = (data.dtypes == 'object')
     print("Categorical variables:",len(list(obj[obj].index)))
-
 
     obj = (data.dtypes == 'object') 
     object_cols = list(obj[obj].index) 
@@ -29,7 +34,7 @@ def main():
         y = data[col].value_counts().reset_index()
         y.columns = [col, 'count']
         max_count = y['count'].max()
-        sns.barplot(x=col, y='count', data=y, palette="muted", ax=axes[index])
+        sns.barplot(x=col, y='count', data=y, palette="muted", legend=False, ax=axes[index])
         axes[index].set_xticklabels([''] * len(y), rotation=90)
         axes[index].set_ylabel(col)
         axes[index].set_ylim(0, max_count + 50)
@@ -40,10 +45,11 @@ def main():
     plt.show()
   
     # Label encode the categorical columns
-    label_encoder = preprocessing.LabelEncoder()
-    obj = (data.dtypes == 'object')
+    label_encoders = {}
     for col in object_cols:
-        data[col] = label_encoder.fit_transform(data[col])
+        le = preprocessing.LabelEncoder()
+        data[col] = le.fit_transform(data[col])
+        label_encoders[col] = le
 
     # Print the first 5 rows of the dataset after encoding
     print(data.head(5))
@@ -70,7 +76,66 @@ def main():
         if missing > 0:
             print(f"Column '{col}' has {missing} missing values.")
         else:
-            print(f"Column '{col}' has no missing values.")
+            print(f"Column '{col}' has 0.")
     
+    # Splitting Data
+    X = data.drop(['Loan_Status'], axis=1)
+    Y = data['Loan_Status']
+    print(X.shape,Y.shape)
+    
+    X_train, X_test, Y_train, Y_test = train_test_split(X,Y,  test_size=0.4, random_state=1)
+    print(X_train.shape, X_test.shape, Y_train.shape, Y_test.shape)
+    
+    
+    knn = KNeighborsClassifier(n_neighbors=3)
+    rfc = RandomForestClassifier(n_estimators = 7, criterion = 'entropy', random_state = 7)
+
+    svc = SVC()
+    lc = LogisticRegression()
+
+        # making predictions of the training set
+    for clf in (rfc, knn, svc, lc):
+        clf.fit(X_train, Y_train)
+        Y_pred = clf.predict(X_train)
+        print("Accuracyscore of ", clf.__class__.__name__,"=", 100*metrics.accuracy_score(Y_train,Y_pred))
+    
+        # making predictions on the testing set 
+    for clf in (rfc, knn, svc,lc): 
+        clf.fit(X_train, Y_train) 
+        Y_pred = clf.predict(X_test) 
+        print("Accuracy score of ", 
+            clf.__class__.__name__,"=", 
+            100*metrics.accuracy_score(Y_test, 
+                                        Y_pred))
+        
+        # Prompt user for input
+    user_input = {}
+    for col in X.columns:
+        if col in object_cols:
+            unique_values = label_encoders[col].inverse_transform(data[col].unique())
+            user_input[col] = [input(f"Enter value for {col} (options: {unique_values}): ")]
+        else:
+            user_input[col] = [float(input(f"Enter value for {col}: "))]
+
+
+    user_input_df = pd.DataFrame(user_input)
+    
+    # Encode categorical variables in user input
+    for col in user_input_df.columns:
+        if col in object_cols:
+            user_input_df[col] = label_encoders[col].transform(user_input_df[col])
+
+    # Make predictions based on user input
+    for clf in (rfc, knn, svc, lc):
+        prediction = clf.predict(user_input_df)
+        prediction_label = "Approved" if prediction[0] == 1 else "Not Approved"
+       
+    # Get the probability of the prediction
+    if hasattr(clf, "predict_proba"):
+        probability = clf.predict_proba(user_input_df)[0][prediction[0]]
+        print(f"Prediction by {clf.__class__.__name__}: {prediction_label} with probability {probability:.2f}")
+    else:
+        print(f"Prediction by {clf.__class__.__name__}: {prediction_label}")
+
 if __name__ == "__main__":
     main()
