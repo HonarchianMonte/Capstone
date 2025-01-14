@@ -9,6 +9,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_val_score
+from sklearn.preprocessing import StandardScaler
 
 from sklearn import metrics
 
@@ -16,7 +18,7 @@ from sklearn import metrics
 
 def main():
     data = pd.read_csv("../Capstone/Data/LoanApprovalPrediction.csv")
-
+    
     data.drop(['Loan_ID'],axis=1,inplace=True)
 
     obj = (data.dtypes == 'object')
@@ -32,14 +34,14 @@ def main():
     
     for index, col in enumerate(object_cols):
         y = data[col].value_counts().reset_index()
-        y.columns = [col, 'count']
+        y.columns = ['category', 'count']
         max_count = y['count'].max()
-        sns.barplot(x=col, y='count', data=y, palette="muted", legend=False, ax=axes[index])
-        axes[index].set_xticklabels([''] * len(y), rotation=90)
+        sns.barplot(x='category', y='count', data=y, hue='category', palette="muted", ax=axes[index], legend=False)
+        axes[index].tick_params(axis='x', rotation=90)
         axes[index].set_ylabel(col)
         axes[index].set_ylim(0, max_count + 50)
         axes[index].yaxis.set_major_locator(MaxNLocator(integer=True, prune='both', nbins=5))
-
+ 
     plt.tight_layout(pad=3.0)  
     plt.subplots_adjust(hspace=0.5, wspace=0.3)
     plt.show()
@@ -84,6 +86,10 @@ def main():
     print(X.shape,Y.shape)
     
     X_train, X_test, Y_train, Y_test = train_test_split(X,Y,  test_size=0.4, random_state=1)
+    scaler = StandardScaler()
+    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns)
+    X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns)
+
     print(X_train.shape, X_test.shape, Y_train.shape, Y_test.shape)
     
     
@@ -91,22 +97,28 @@ def main():
     rfc = RandomForestClassifier(n_estimators = 7, criterion = 'entropy', random_state = 7)
 
     svc = SVC()
-    lc = LogisticRegression()
+    lc = LogisticRegression(max_iter=5000, solver='liblinear')
 
-        # making predictions of the training set
-    for clf in (rfc, knn, svc, lc):
-        clf.fit(X_train, Y_train)
-        Y_pred = clf.predict(X_train)
+        # Cross-validation
+    classifiers = [rfc, knn, svc, lc]
+    for clf in classifiers:
+        scores = cross_val_score(clf, X_train_scaled, Y_train, cv=5)
+        print(f"Cross-validation scores for {clf.__class__.__name__}: {scores}")
+        print(f"Mean cross-validation score for {clf.__class__.__name__}: {scores.mean():.2f}")
+
+    # Making predictions on the training set
+    for clf in classifiers:
+        clf.fit(X_train_scaled, Y_train)
+        Y_pred = clf.predict(X_train_scaled)
         print("Accuracyscore of ", clf.__class__.__name__,"=", 100*metrics.accuracy_score(Y_train,Y_pred))
-    
-        # making predictions on the testing set 
-    for clf in (rfc, knn, svc,lc): 
+
+    # Making predictions on the testing set 
+    for clf in classifiers: 
         clf.fit(X_train, Y_train) 
-        Y_pred = clf.predict(X_test) 
+        Y_pred = clf.predict(X_test_scaled) 
         print("Accuracy score of ", 
             clf.__class__.__name__,"=", 
-            100*metrics.accuracy_score(Y_test, 
-                                        Y_pred))
+            100*metrics.accuracy_score(Y_test, Y_pred))
         
         # Prompt user for input
     user_input = {}
